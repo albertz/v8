@@ -1423,12 +1423,39 @@ bool VirtualMemory::HasLazyCommits() {
 // Definition of invalid thread handle and id.
 static const HANDLE kNoThread = INVALID_HANDLE_VALUE;
 
+static void SetCurThreadName(const char* name) {
+  // Reference: http://www.codeproject.com/KB/threads/Name_threads_in_debugger.aspx
+
+  typedef struct tagTHREADNAME_INFO {
+    DWORD dwType;  // Must be 0x1000.
+    LPCSTR szName;  // Pointer to name (in user addr space).
+    DWORD dwThreadID;  // Thread ID (-1=caller thread).
+    DWORD dwFlags;  // Reserved for future use, must be zero.
+  } THREADNAME_INFO;
+
+  THREADNAME_INFO info;
+  {
+    info.dwType = 0x1000;
+    info.szName = name;
+    info.dwThreadID = (DWORD)-1;
+    info.dwFlags = 0;
+  }
+
+  __try {
+    RaiseException(
+      0x406D1388 /* MSVC EXCEPTION */, 0,
+      sizeof(info)/sizeof(DWORD), reinterpret_cast<ULONG_PTR*>(&info));
+  }
+  __except(EXCEPTION_CONTINUE_EXECUTION) {}
+}
+
 // Entry point for threads. The supplied argument is a pointer to the thread
 // object. The entry function dispatches to the run method in the thread
 // object. It is important that this function has __stdcall calling
 // convention.
 static unsigned int __stdcall ThreadEntry(void* arg) {
   Thread* thread = reinterpret_cast<Thread*>(arg);
+  SetCurThreadName(thread->name());
   thread->NotifyStartedAndRun();
   return 0;
 }
